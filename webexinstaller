@@ -4,7 +4,7 @@
 appNewVersion=$(curl -fs https://help.webex.com/en-us/article/8dmbcr/Webex-App-%7C-What%27s-New | tr '"' "\n" |  grep "Mac—"| head -1|sed 's/[^0-9\.]//g' )
 appCurVersion=$(defaults read /Applications/Webex.app/Contents/info.plist | grep "CFBundleShortVersionString" | awk -F'"' '{print $2}')
 appName="Webex.app"
-tmpDir="/var/cdw/packages"
+tmpDir="/var/<companyName>/packages"
 dmgFile="$tmpDir/Webex.dmg"
 volumeName="/Volumes/Webex"
 expectedTeamID="DE8Y96K9QP"
