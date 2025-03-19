@@ -1,0 +1,128 @@
+#!/bin/zsh --no-rcs
+
+cs_friendly="Crowdstrike"
+r7_friendly="Rapid7"
+zs_friendly="Zscaler"
+cs_app="/Applications/Falcon.app"
+r7_app="/opt/rapid7/ir_agent"
+zs_app="/Applications/Zscaler/Zscaler.app"
+
+# Function to get the latest macOS version
+get_latest_macos_version() {
+    echo "Fetching the latest macOS version..."
+    latest_version="15.1"  # Replace with the actual latest version
+    echo "Latest macOS version: $latest_version"
+}
+
+# Function to check if the current macOS version is the latest
+check_macos_version() {
+    echo "Checking current macOS version..."
+    current_version=$(sw_vers -productVersion)
+    echo "Current macOS version: $current_version"
+    if [ "$current_version" = "$latest_version" ]; then
+        echo "macOS is up to date."
+        macos_status="Up to date"
+    else
+        echo "macOS is not up to date."
+        macos_status="Not up to date"
+    fi
+}
+
+# Function to check encryption status
+check_encryption_status() {
+    echo "Checking encryption status..."
+    if fdesetup status | grep -q "FileVault is On"; then
+        echo "Encryption: Enabled"
+        encryption_status="Enabled"
+    else
+        echo "Encryption: Disabled"
+        encryption_status="Disabled"
+    fi
+}
+
+# Function to check firewall status
+check_firewall_status() {
+    echo "Checking firewall status..."
+    if /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate | grep -q "enabled"; then
+        echo "Firewall: Enabled"
+        firewall_status="Enabled"
+    else
+        echo "Firewall: Disabled"
+        firewall_status="Disabled"
+    fi
+}
+
+# Function to check if an application is installed
+check_app_installed() {
+    local app_name="$1"
+    echo "Checking if $app_name is installed..."
+    if [ -d "$app_name" ]; then
+        echo "$app_name is installed"
+        app_installed="Yes"
+        check_app_status $app_name
+    else
+        echo "$app_name is not installed"
+        app_installed="No"
+        app_connection="N/A"
+    fi
+}
+
+# Function to check app connection status
+check_app_status() {
+    local app_name="$1"
+    echo "Checking $app_name status..."
+        if [[ $app_name == "$cs_app" ]]; then
+       cs_connection=$( /Applications/Falcon.app/Contents/Resources/falconctl stats | grep -q "State: connected" && echo "connected" || echo "disconnected" )
+       echo "$cs_connection"
+    elif [[ $app_name == "$r7_app" ]]; then
+       r7_connection=$( [ -e /opt/rapid7/ir_agent/ir_agent ] && date -r $(cat /opt/rapid7/ir_agent/components/insight_agent/common/config/agent.jobs.tem_realtime.json | awk '/asset_info_last_collection_time/ {print $2}' | sed 's/,//g') || echo "Agent Not Installed" )
+        echo "Last Collection Time: $r7_connection"
+        echo "Connected"
+    elif [[ $variable == "$zs_app" ]]; then
+        echo "Action for variable_c"
+        zs_connection=$(/Applications/Zscaler/Zscaler.app/Contents/PlugIns/zscli status -s zia |grep )
+        echo "$zs_connection"
+    else
+        # Default action if none of the above conditions are met
+        echo "Connection not Found"
+    fi
+}
+
+# Function to write results to plist file
+write_to_plist() {
+    local plist_file="/Users/Shared/sec_status_results.plist"
+    echo "Writing results to $plist_file..."
+    /usr/libexec/PlistBuddy -c "Clear dict" $plist_file
+    # General macOS
+    /usr/libexec/PlistBuddy -c "add 'MacOSStatus dict' $plist_file"
+    /usr/libexec/PlistBuddy -c "add :MacOSStatus:version string $macos_status" $plist_file
+    /usr/libexec/PlistBuddy -c "Add :MacOSStatus:FirewallStatus string $firewall_status" $plist_file
+    /usr/libexec/PlistBuddy -c "Add :MacOSStatus:EncryptionStatus string $encryption_status" $plist_file
+    
+    # Security Tools
+    # Add Crowdstrike entries
+    /usr/libexec/PlistBuddy -c "Add :$cs_friendly dict" $plist_file
+    /usr/libexec/PlistBuddy -c "Add :$cs_friendly:InstalledStatus string $app_installed" $plist_file
+    /usr/libexec/PlistBuddy -c "Add :$cs_friendly:ConnectionStatus string $cs_connection" $plist_file
+    # Add Rapid7 entries
+    /usr/libexec/PlistBuddy -c "Add :$r7_friendly dict" $plist_file
+    /usr/libexec/PlistBuddy -c "Add :$r7_friendly:InstalledStatus string $app_installed" $plist_file
+    /usr/libexec/PlistBuddy -c "Add :$r7_friendly:ConnectionStatus string $r7_connection" $plist_file
+    # Add Zscaler entries
+    /usr/libexec/PlistBuddy -c "Add :$zs_friendly dict" $plist_file
+    /usr/libexec/PlistBuddy -c "Add :$zs_friendly:InstalledStatus string $app_installed" $plist_file
+    /usr/libexec/PlistBuddy -c "Add :$zs_friendly:ConnectionStatus string $zs_connection" $plist_file
+    
+
+    echo "Results written to $plist_file"
+}
+
+# Script Tasks    
+check_macos_version
+get_latest_macos_version
+check_encryption_status
+check_firewall_status
+check_app_installed "$cs_app"
+check_app_installed "$r7_app"
+check_app_installed "$zs_app"
+write_to_plist
