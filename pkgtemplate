@@ -1,0 +1,48 @@
+#!/bin/bash
+
+#Variables
+
+appName="$4"            #Enter the full application name into Jamf, example:"Company Portal.app"
+expectedTeamID="$5"     #Enter the Expected Team ID into Jamf. 
+tempDir="$6"            #This should be added like: "/tmp/packages"
+pkgFile="$7"            #This should be added like: "$tempDir/insert-pkg-name.pkg"
+downloadURL="$8"        #Add the URL that the pkg can be downloaded from
+
+#Checks for the temp directory, if it does not exist it creates it. 
+if [ -d "$tempDir" ];then
+    echo "$tempDir Exists, moving on"
+else
+    echo "Filepath does not exist"
+    mkdir -p $tempDir
+    
+fi
+
+#Downloads the Application
+curl $downloadURL -o $pkgFile
+echo "Successfully downloaded $appName"
+
+#Validates the Application
+echo "Validating the Application TeamID"
+pkgTeamid=$(pkgutil --check-signature $pkgFile | grep -A 1 "Developer ID Installer" | grep -o "([A-Z0-9]*)" | tr -d '()')
+if [ "$pkgTeamid" == "$expectedTeamID" ]; then
+    echo "$pkgFile returns the expected TeamID:$expectedTeamID"
+else
+    echo "$pkgFile does not return the expected TeamID and is considered not legit"
+    rm -rf $pkgFile
+    echo "Removed $pkgFile"
+    exit 1
+fi
+
+#Installs the pkg
+echo "Installing $appName"
+installer -pkg $pkgFile -target /
+
+#Cleanup
+if [ -d "/Applications/$appName" ]; then
+    echo "$appName successfully installed"
+    rm -rf $tempDir
+    echo "Just like Mr. Clean, we are sparkling!"
+else
+    echo "$appName Not installed" 
+    exit 1
+fi
