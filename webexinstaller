@@ -1,0 +1,81 @@
+#!/bin/bash
+
+#Variables
+appNewVersion=$(curl -fs https://help.webex.com/en-us/article/8dmbcr/Webex-App-%7C-What%27s-New | tr '"' "\n" |  grep "Mac—"| head -1|sed 's/[^0-9\.]//g' )
+appCurVersion=$(defaults read /Applications/Webex.app/Contents/info.plist | grep "CFBundleShortVersionString" | awk -F'"' '{print $2}')
+appName="Webex.app"
+tmpDir="/var/cdw/packages"
+dmgFile="$tmpDir/Webex.dmg"
+volumeName="/Volumes/Webex"
+expectedTeamID="DE8Y96K9QP"
+appvolPath="$volumeName/$appName"
+
+#Checks the version number against the newest version
+    if [ "$appCurVersion" == "$appNewVersion" ]; then 
+        echo "There is no update at this time, exiting"
+        exit 0
+    elif [[ "$appCurVersion" == *"/Applications/Webex.app/Contents/info.plist does not exist"* ]];then 
+        echo "Webex is not installed, Downloading the latest version" 
+    elif [ "$appCurVersion" != "$appNewVersion" ]; then 
+        echo "The currently installed version of Webex does not match the newest version"
+    else 
+        echo "Something has gone terribly wrong, please investigate"
+        exit 1
+fi
+
+#Checks for the temp directory, if it does not exist it creates it. 
+if [ -d "$tmpDir" ];then
+    echo "$tmpDir Exists, moving on"
+else
+    echo "Filepath does not exist"
+    mkdir -p $tmpDir
+    echo "$tmpDir Created."
+    
+fi
+
+
+#Specifies what the download URL should be based on system architecture 
+    if [[ $(arch) == arm64 ]]; then
+        echo "Downloading Arm Version of $appName"
+        downloadURL="https://binaries.webex.com/webex-macos-apple-silicon/Webex.dmg"
+    elif [[ $(arch) == i386 ]]; then
+        echo "Downloading Intel Version of $appName"
+        downloadURL="https://binaries.webex.com/webex-macos-intel/Webex.dmg"
+
+fi
+
+#Downloads the Application
+curl $downloadURL -o $dmgFile
+echo "Successfully downloaded $appName"
+
+#Mount the DMG and install
+hdiutilAttach=$(hdiutil attach $dmgFile -nobrowse)
+echo "Used hdiutil to mount $appName"
+
+#Validates the Application
+echo "Validating the Application TeamID"
+dmgTeamid=$(codesign -dv --verbose=4 "$appvolPath" 2>&1 | grep "TeamIdentifier=" | cut -d'=' -f2)
+if [ "$dmgTeamid" == "$expectedTeamID" ]; then
+    echo "$dmgFile returns the expected TeamID:$expectedTeamID"
+    cp -pPR "$appvolPath" /Applications/
+    echo "Copied $appName to /Applications"
+else
+    echo "$dmgFile does not return the expected TeamID and is considered not legit"
+    hdiutil detach $dmgFile
+    rm -rf $tmpDir
+    echo "$dmgFile has been removed"
+    exit 1
+fi
+
+
+#Cleanup
+if [ -d "/Applications/$appName" ]; then
+    echo "$appName successfully installed"
+    hdiutil detach $volumeName
+    rm -rf $tmpDir
+    echo "all clean"
+else
+    echo "$appName Not installed" 
+    exit 1
+
+fi
